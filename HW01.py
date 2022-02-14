@@ -1,20 +1,29 @@
-#
+#HW01.py
+#Author: Luke Runyan
+#Class: CS7641
+#Date: 20220212
 
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import cross_validate
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.preprocessing import LabelEncoder
-from sklearn.compose import make_column_transformer
-from sklearn.neighbors import LocalOutlierFactor
-from sklearn.tree import plot_tree
 import pandas as pd
 import numpy as np
 import time
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import cross_validate
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import learning_curve
+from sklearn.neural_network import MLPClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.svm import SVC
+from sklearn.compose import make_column_transformer
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.tree import plot_tree
 
-#oneHot Encode An attribute
+#oneHot Encode an attribute
 def OHE_Helper(df, target):
 	# Get one hot encoding of atr
 	one_hot = pd.get_dummies(df[target])
@@ -32,117 +41,197 @@ def encode_Helper(df, target):
 	df[target] = labels
 	return df
 
-########## MAIN ##########
+#
+#==========================================================================
+#
+################################### MAIN ###################################
+#
+#==========================================================================
+
+##########========== PRE-PROCESSING DS1==========##########
 #CSV NAME
 csv = 'aw_fb_data.csv'
 target = 'activity'
-x_drop =[target] 
-
-# Read Data and parse into test and train data
+x_drop = [target]
 df = pd.read_csv(csv)
-
 #pre processing
 df = OHE_Helper(df, 'device')
-#df = encode_Helper(df, 'activity')
-activity_dict = {'Lying':0, 'Sitting':1, 'Self Pace walk':2, 'Running 3 METs':3, 'Running 5 METs':3, 'Running 7 METs':3 }
-df['activity'] = df.activity.apply(lambda x: activity_dict[x])
+df = encode_Helper(df, 'activity')
 
-
-# #Discard Outliers
-# clf = LocalOutlierFactor()
-# y_pred = clf.fit_predict(df) 
-# x_score = clf.negative_outlier_factor_
-# outlier_score = pd.DataFrame()
-# outlier_score["score"] = x_score
-
-# #threshold
-# threshold2 = -1.5                                            
-# filtre2 = outlier_score["score"] < threshold2
-# outlier_index = outlier_score[filtre2].index.tolist()
-
-# df.drop(outlier_index, inplace=True)
-
-
-#parse and split
+# #parse and split
 Y = df[target]
 X = df.drop(x_drop, axis=1)
+
+# #Normalize Input Data
 min_max = MinMaxScaler()
-X = min_max.fit_transform(X)
-x_train, x_test, y_train, y_test = train_test_split(X,Y,test_size = 0.3, random_state = 42)
+X_Norm = min_max.fit_transform(X)
+X = pd.DataFrame(X_Norm)
+x_train, x_test, y_train, y_test = train_test_split(X,Y,test_size = 0.1, random_state = 42)
 
+##########========== DECISION TREE ==========##########
+clf = DecisionTreeClassifier(criterion='entropy', ccp_alpha=.00068)
 
-#create decision tree
-dec_tree = DecisionTreeClassifier(max_leaf_nodes = None, class_weight = None, random_state=0)
+##########========== TEST SCORE ==========##########
 start_time = time.time()
-dec_tree.fit(x_train,y_train)
+clf.fit(x_train,y_train)
 training_time = time.time()-start_time
-print("__________NO PRUNING__________")
-print('Training Time: ', training_time)
-print("Train Accuracy ",dec_tree.score(x_train,y_train))
-print("Test Accuracy: ",dec_tree.score(x_test,y_test))
+print("__________ DECISION TREE __________")
+print("Training Time", training_time)
+print("Train Accuracy: ",clf.score(x_train, y_train))
+print("Test Accuracy: ",clf.score(x_test,y_test))
 
+##########========== BOOSTED DECISION TREE ==========##########
+dec_tree = DecisionTreeClassifier(max_leaf_nodes = None, random_state=0, ccp_alpha=.00045)
 path = dec_tree.cost_complexity_pruning_path(x_train,y_train)
 ccp_alphas, impurities = path.ccp_alphas, path.impurities
+clf = AdaBoostClassifier(dec_tree, n_estimators=20, learning_rate = 1)
 
-# fig, ax = plt.subplots()
-# ax.plot(ccp_alphas[:-1],impurities[:-1], marker="o", drawstyle="steps-post")
-# ax.set_xlabel("effective alpha")
-# ax.set_ylabel("Totatl Impurity of Leaves")
-# ax.set_title("Total Impurity vs Effective Alpha for Training Set")
-# plt.show()
+##########========== TEST SCORE ==========##########
+start_time = time.time()
+clf.fit(x_train,y_train)
+training_time = time.time()-start_time
+print("__________ BOOSTED DECISION TREE __________")
+print("Training Time", training_time)
+print("Train Accuracy: ",clf.score(x_train, y_train))
+print("Test Accuracy: ",clf.score(x_test,y_test))
 
-# clfs = []
-# for ccp_alpha in ccp_alphas:
-# 	clf = DecisionTreeClassifier(max_leaf_nodes = None, random_state=0, ccp_alpha=ccp_alpha)
-# 	clf.fit(x_train, y_train)
-# 	clfs.append(clf)
-# print(
-# 	"Number of nodes in the last tree is: {} with ccp_Alpha: {}".format(clfs[-1].tree_.node_count, ccp_alphas[-1]
-# 	)
-# )
+##########========== NEURAL NETWORK ==========##########
+clf = MLPClassifier(hidden_layer_sizes=(18,200,), activation='relu', solver='adam', 
+						alpha=0.0001, batch_size=100,
+						learning_rate_init=0.001, max_iter=1000, shuffle=True, 
+						random_state=None, tol=0.0001, verbose=True, warm_start=False, 
+						early_stopping=False, 
+						validation_fraction=0.1, beta_1=0.9, beta_2=0.999, epsilon=1e-08, 
+						n_iter_no_change=10)
 
-# clfs = clfs[:-1]
-# ccp_alphas = ccp_alphas[:-1]
-
-# node_counts = [clf.tree_.node_count for clf in clfs]
-# depth = [clf.tree_.max_depth for clf in clfs]
-# fig, ax = plt.subplots(2, 1)
-# ax[0].plot(ccp_alphas, node_counts, marker="o", drawstyle="steps-post")
-# ax[0].set_xlabel("alpha")
-# ax[0].set_ylabel("number of nodes")
-# ax[0].set_title("Number of nodes vs alpha")
-# ax[1].plot(ccp_alphas, depth, marker="o", drawstyle="steps-post")
-# ax[1].set_xlabel("alpha")
-# ax[1].set_ylabel("depth of tree")
-# ax[1].set_title("Depth vs alpha")
-# fig.tight_layout()
-# plt.show()
-
-# train_scores = [clf.score(x_train, y_train) for clf in clfs]
-# test_scores = [clf.score(x_test, y_test) for clf in clfs]
-
-# fig, ax = plt.subplots()
-# ax.set_xlabel("alpha")
-# ax.set_ylabel("accuracy")
-# ax.set_title("Accuracy vs alpha for training and testing sets")
-# ax.plot(ccp_alphas, train_scores, marker="o", label="train", drawstyle="steps-post")
-# ax.plot(ccp_alphas, test_scores, marker="o", label="test", drawstyle="steps-post")
-# ax.legend()
-# plt.show()
-
-dec_tree = DecisionTreeClassifier(max_leaf_nodes = None, random_state=0, ccp_alpha=.0002)
+##########========== TEST SCORE ==========##########
 start_time = time.time()
 dec_tree.fit(x_train,y_train)
 training_time = time.time()-start_time
-print("__________AFTER PRUNING__________")
+print("__________ NEURAL NETWORK __________")
 print("Training Time", training_time)
 print("Train Accuracy: ",dec_tree.score(x_train, y_train))
 print("Test Accuracy: ",dec_tree.score(x_test,y_test))
 
-# plt.figure(figsize = (20,10))
-# plot_tree(dec_tree, 
-# 	feature_names = X.columns,
-# 	class_names = ["0", "1"],
-# 	rounded = True,
-# 	filled = True)
-# plt.show()
+##########========== KNN ==========##########
+clf = KNeighborsClassifier(n_neighbors=1, weights='uniform', algorithm='auto', leaf_size=30, 
+							p=2, metric='minkowski', metric_params=None, n_jobs=None)
+
+##########========== TEST SCORE ==========##########
+start_time = time.time()
+clf.fit(x_train,y_train)
+training_time = time.time()-start_time
+print("__________ KNN __________")
+print("Training Time", training_time)
+print("Train Accuracy: ",clf.score(x_train, y_train))
+print("Test Accuracy: ",clf.score(x_test,y_test))
+
+##########========== VSM ==========##########
+clf = SVC(gamma='scale', kernel = 'poly', degree = 14)
+
+##########========== TEST SCORE ==========##########
+start_time = time.time()
+clf.fit(x_train,y_train)
+training_time = time.time()-start_time
+print("__________VSM __________")
+print("Training Time", training_time)
+print("Train Accuracy: ",clf.score(x_train, y_train))
+print("Test Accuracy: ",clf.score(x_test,y_test))
+
+
+
+###############################################################
+
+##############    DATA SET 2 ######################
+
+###############################################################
+
+
+##########========== PRE-PROCESSING DS2==========##########
+csv = 'heart_disease_health_indicators_BRFSS2015.csv'
+df = pd.read_csv(csv)
+target = 'HeartDiseaseorAttack'
+x_drop = [target]
+
+# #parse and split
+Y = df[target]
+X = df.drop(x_drop, axis=1)
+
+# #Normalize Input Data
+min_max = MinMaxScaler()
+X_Norm = min_max.fit_transform(X)
+X = pd.DataFrame(X_Norm)
+
+x_train, x_test, y_train, y_test = train_test_split(X,Y,test_size = 0.2, random_state = 42)
+
+
+# ##########========== DECISION TREE ==========##########
+clf = DecisionTreeClassifier(criterion='entropy',ccp_alpha=.00125)
+
+##########========== TEST SCORE ==========##########
+start_time = time.time()
+clf.fit(x_train,y_train)
+training_time = time.time()-start_time
+print("__________DECISION TREE __________")
+print("Training Time", training_time)
+print("Train Accuracy: ",clf.score(x_train, y_train))
+print("Test Accuracy: ",clf.score(x_test,y_test))
+
+ # # ##########========== BOOSTED DECISION TREE ==========##########
+dec_tree = DecisionTreeClassifier(max_leaf_nodes = None, random_state=0, ccp_alpha=.00159)
+path = dec_tree.cost_complexity_pruning_path(x_train,y_train)
+ccp_alphas, impurities = path.ccp_alphas, path.impurities
+clf = AdaBoostClassifier(dec_tree, n_estimators=20, learning_rate = 1)
+
+##########========== TEST SCORE ==========##########
+start_time = time.time()
+clf.fit(x_train,y_train)
+training_time = time.time()-start_time
+print("__________ BOOSTED DECISION TREE __________")
+print("Training Time", training_time)
+print("Train Accuracy: ",clf.score(x_train, y_train))
+print("Test Accuracy: ",clf.score(x_test,y_test))
+
+# ##########========== NEURAL NET ==========##########
+clf = MLPClassifier(hidden_layer_sizes=(18,30,), activation='relu', solver='adam', 
+						alpha=0.0001, batch_size=100,
+						learning_rate_init=0.001, max_iter=1000, shuffle=True, 
+						random_state=None, tol=0.0001, verbose=False, warm_start=False, 
+						early_stopping=False, 
+						validation_fraction=0.1, beta_1=0.9, beta_2=0.999, epsilon=1e-08, 
+						n_iter_no_change=10)
+#########========== TEST SCORE ==========##########
+start_time = time.time()
+clf.fit(x_train,y_train)
+training_time = time.time()-start_time
+print("__________NEURAL NET __________")
+print("Training Time", training_time)
+print("Train Accuracy: ",clf.score(x_train, y_train))
+print("Test Accuracy: ",clf.score(x_test,y_test))
+
+# ##########========== KNN ==========##########
+clf = KNeighborsClassifier(n_neighbors=12, weights='uniform', algorithm='auto', leaf_size=30, 
+							p=2, metric='minkowski', metric_params=None, n_jobs=None)
+
+##########========== TEST SCORE ==========##########
+start_time = time.time()
+clf.fit(x_train,y_train)
+training_time = time.time()-start_time
+print("__________ KNN __________")
+print("Training Time", training_time)
+print("Train Accuracy: ",clf.score(x_train, y_train))
+print("Test Accuracy: ",clf.score(x_test,y_test))
+
+# ##########========== SVM ==========##########
+clf = SVC(gamma='scale', kernel = 'poly', degree=3)
+
+##########========== TEST SCORE ==========##########
+start_time = time.time()
+dec_tree.fit(x_train,y_train)
+training_time = time.time()-start_time
+print("__________ SVM __________")
+print("Training Time", training_time)
+print("Train Accuracy: ",dec_tree.score(x_train, y_train))
+print("Test Accuracy: ",dec_tree.score(x_test,y_test))
+
+

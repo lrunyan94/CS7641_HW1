@@ -3,7 +3,12 @@
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_validate
+from sklearn.metrics import make_scorer
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import learning_curve
+from sklearn.model_selection import GridSearchCV
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.svm import SVC
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import LabelEncoder
@@ -32,117 +37,130 @@ def encode_Helper(df, target):
 	df[target] = labels
 	return df
 
-########## MAIN ##########
+#
+#==========================================================================
+#
+################################### MAIN ###################################
+#
+#==========================================================================
+
+##########========== PRE-PROCESSING ==========##########
 #CSV NAME
-csv = 'aw_fb_data.csv'
-target = 'activity'
-x_drop =[target] 
+# csv = 'aw_fb_data.csv'
+# target = 'activity'
+# x_drop = [target]
+# df = pd.read_csv(csv)
 
-# Read Data and parse into test and train data
+csv = 'heart_disease_health_indicators_BRFSS2015.csv'
 df = pd.read_csv(csv)
+target = 'HeartDiseaseorAttack'
+x_drop = [target]
 
-#pre processing
-df = OHE_Helper(df, 'device')
-#df = encode_Helper(df, 'activity')
-activity_dict = {'Lying':0, 'Sitting':1, 'Self Pace walk':2, 'Running 3 METs':3, 'Running 5 METs':3, 'Running 7 METs':3 }
-df['activity'] = df.activity.apply(lambda x: activity_dict[x])
+# #pre processing
+# df = OHE_Helper(df, 'device')
+# df = encode_Helper(df, 'activity')
 
-
-# #Discard Outliers
-# clf = LocalOutlierFactor()
-# y_pred = clf.fit_predict(df) 
-# x_score = clf.negative_outlier_factor_
-# outlier_score = pd.DataFrame()
-# outlier_score["score"] = x_score
-
-# #threshold
-# threshold2 = -1.5                                            
-# filtre2 = outlier_score["score"] < threshold2
-# outlier_index = outlier_score[filtre2].index.tolist()
-
-# df.drop(outlier_index, inplace=True)
-
-
-#parse and split
+# #parse and split
 Y = df[target]
 X = df.drop(x_drop, axis=1)
+
+
+# #Normalize Input Data
 min_max = MinMaxScaler()
-X = min_max.fit_transform(X)
-x_train, x_test, y_train, y_test = train_test_split(X,Y,test_size = 0.3, random_state = 42)
+X_Norm = min_max.fit_transform(X)
+X = pd.DataFrame(X_Norm)
+
+x_train, x_test, y_train, y_test = train_test_split(X,Y,test_size = 0.2, random_state = 42)
+
+##########========== MODEL ==========##########
+clf = SVC(gamma='scale', kernel = 'poly')
 
 
-#create decision tree
-dec_tree = DecisionTreeClassifier(max_leaf_nodes = None, class_weight = None, random_state=0)
-start_time = time.time()
-dec_tree.fit(x_train,y_train)
-training_time = time.time()-start_time
-print("__________NO PRUNING__________")
-print('Training Time: ', training_time)
-print("Train Accuracy ",dec_tree.score(x_train,y_train))
-print("Test Accuracy: ",dec_tree.score(x_test,y_test))
+##########========== KERNEL OPTIMIZATION ==========##########
+# scores = []
+# kernels = ['linear', 'poly', 'rbf', 'sigmoid']
+# for k in kernels:
+# 	model = SVC(kernel=k)
+# 	model.fit(x_train,y_train)
+# 	scores.append(model.score(x_train,y_train))
 
-path = dec_tree.cost_complexity_pruning_path(x_train,y_train)
-ccp_alphas, impurities = path.ccp_alphas, path.impurities
-
-# fig, ax = plt.subplots()
-# ax.plot(ccp_alphas[:-1],impurities[:-1], marker="o", drawstyle="steps-post")
-# ax.set_xlabel("effective alpha")
-# ax.set_ylabel("Totatl Impurity of Leaves")
-# ax.set_title("Total Impurity vs Effective Alpha for Training Set")
+# plt.bar(kernels,scores)
+# plt.title('Accuracy v. Kernel Type')
+# plt.ylabel('Accuracy')
 # plt.show()
 
-# clfs = []
-# for ccp_alpha in ccp_alphas:
-# 	clf = DecisionTreeClassifier(max_leaf_nodes = None, random_state=0, ccp_alpha=ccp_alpha)
-# 	clf.fit(x_train, y_train)
-# 	clfs.append(clf)
-# print(
-# 	"Number of nodes in the last tree is: {} with ccp_Alpha: {}".format(clfs[-1].tree_.node_count, ccp_alphas[-1]
-# 	)
-# )
-
-# clfs = clfs[:-1]
-# ccp_alphas = ccp_alphas[:-1]
-
-# node_counts = [clf.tree_.node_count for clf in clfs]
-# depth = [clf.tree_.max_depth for clf in clfs]
-# fig, ax = plt.subplots(2, 1)
-# ax[0].plot(ccp_alphas, node_counts, marker="o", drawstyle="steps-post")
-# ax[0].set_xlabel("alpha")
-# ax[0].set_ylabel("number of nodes")
-# ax[0].set_title("Number of nodes vs alpha")
-# ax[1].plot(ccp_alphas, depth, marker="o", drawstyle="steps-post")
-# ax[1].set_xlabel("alpha")
-# ax[1].set_ylabel("depth of tree")
-# ax[1].set_title("Depth vs alpha")
-# fig.tight_layout()
+##########========== LEARNING CURVE ==========##########
+# train_sizes, train_score, test_score = learning_curve(clf , x_train,y_train, cv=5, 
+#  														scoring = 'accuracy', n_jobs=-1, 
+#  														train_sizes = np.linspace(0.01,1.0, 10),
+#  														verbose = True)
+# train_mean = np.mean(train_score, axis=1)
+# train_std = np.std(train_score, axis=1)
+# test_mean = np.mean(test_score, axis=1)
+# test_std = np.std(test_score, axis=1)
+# plt.plot(train_sizes, train_mean, label="Training Score")
+# plt.plot(train_sizes, test_mean, label = 'Validation Scores')
+# plt.fill_between(train_sizes, train_mean-train_std, train_mean+train_std, color='#DDDDDD', label="Cross Validation Set Standard Deviation")
+# plt.fill_between(train_sizes, test_mean-test_std, test_mean+test_std, color='#DDDDDD')
+# plt.xlabel('Training Size')
+# plt.ylabel('Accuracy')
+# plt.title(' Learning Curve')
+# plt.legend()
 # plt.show()
 
-# train_scores = [clf.score(x_train, y_train) for clf in clfs]
-# test_scores = [clf.score(x_test, y_test) for clf in clfs]
 
-# fig, ax = plt.subplots()
-# ax.set_xlabel("alpha")
-# ax.set_ylabel("accuracy")
-# ax.set_title("Accuracy vs alpha for training and testing sets")
-# ax.plot(ccp_alphas, train_scores, marker="o", label="train", drawstyle="steps-post")
-# ax.plot(ccp_alphas, test_scores, marker="o", label="test", drawstyle="steps-post")
-# ax.legend()
-# plt.show()
+#########========== DEGREE OPTIMIZATION ==========##########
+scores = []
+train_times = []
+#degrees= [14,15,]
+degrees= [1,2,3,4,5,6]
+for d in degrees:
+	model = SVC(gamma='scale', kernel = 'poly', degree=d)
+	cv_results = cross_validate(model, x_train, y_train, cv=3)
+	train_mean = np.mean(cv_results['test_score'])
+	train_times.append(np.mean(cv_results['fit_time']))
+	scores.append(train_mean)
 
-dec_tree = DecisionTreeClassifier(max_leaf_nodes = None, random_state=0, ccp_alpha=.0002)
-start_time = time.time()
-dec_tree.fit(x_train,y_train)
-training_time = time.time()-start_time
-print("__________AFTER PRUNING__________")
-print("Training Time", training_time)
-print("Train Accuracy: ",dec_tree.score(x_train, y_train))
-print("Test Accuracy: ",dec_tree.score(x_test,y_test))
 
-# plt.figure(figsize = (20,10))
-# plot_tree(dec_tree, 
-# 	feature_names = X.columns,
-# 	class_names = ["0", "1"],
-# 	rounded = True,
-# 	filled = True)
-# plt.show()
+fig, ax = plt.subplots(2, 1)
+ax[0].plot(degrees, scores)
+ax[0].set_xlabel("Polynomial Degree")
+ax[0].set_ylabel("Accuracy")
+ax[0].set_title("Accuracy v. Polynomial Degree")
+ax[1].plot(degrees, train_times)
+ax[1].set_xlabel("Polynomial Degree")
+ax[1].set_ylabel("Time to Train Model")
+ax[1].set_title("Training Time v. Polynomial Degree")
+fig.tight_layout()
+plt.show()
+
+# scores = []
+# model = SVC(gamma='scale', kernel = 'poly', degree=4)
+# cv_results = cross_validate(model, x_train, y_train, cv=3)
+
+# print(cv_results['test_score'])
+# print(cv_results['fit_time'])
+# print(np.mean(cv_results['test_score']))
+# print(np.mean(cv_results['fit_time']))
+
+
+
+
+
+
+
+
+
+# model = SVC(C=10.0, kernel='poly', degree=9, gamma='scale', coef0=0.0, shrinking=True, 
+# 			probability=False, tol=0.001, cache_size=200, class_weight=None, verbose=False, 
+# 			max_iter=- 1, decision_function_shape='ovr', break_ties=False, random_state=None)
+# start_time = time.time()
+# model.fit(x_train,y_train)
+
+
+# training_time = time.time()-start_time
+# print("__________RESULTS__________")
+# print('Training Time: ', training_time)
+# print("Train Accuracy ",model.score(x_train,y_train))
+# print("Test Accuracy: ",model.score(x_test,y_test))
+
